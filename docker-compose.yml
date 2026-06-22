@@ -1,0 +1,132 @@
+# Infrastructure for local development (the backend stack only — the frontend
+# is run separately with `npm run dev`).
+#
+# Run these from the `backend/` directory:
+#   Start:  docker compose up -d
+#   Stop:   docker compose down
+#   Logs:   docker compose logs -f
+#
+# `name:` pins the Compose project so the data volumes keep the same names no
+# matter which directory you run from (otherwise the volumes — and your data —
+# would be orphaned if the folder name changed).
+name: developer-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: devplatform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: devplatform
+    ports:
+      # Host 55432 -> container 5432. A native Windows PostgreSQL already
+      # occupies 5432 AND 5433, so we use a high, clearly-free host port.
+      - '55432:5432'
+    volumes:
+      # Named volume so data survives `docker compose down`.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: devplatform-redis
+    restart: unless-stopped
+    ports:
+      # Host 56379 -> container 6379 (lower Redis ports are already taken).
+      - '56379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- Backend (Step 19) ----
+  # The NestJS app itself, containerized. It talks to postgres/redis by their
+  # SERVICE NAMES on the compose network (internal ports 5432/6379) — NOT the
+  # host port mappings. For fast local dev you can still run it on the host with
+  # `npm run start:dev` and leave this service stopped.
+  backend:
+    build:
+      # Compose now lives inside backend/, so the build context is the current dir.
+      context: .
+    container_name: devplatform-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      GLOBAL_PREFIX: api
+      # Service-name DNS + INTERNAL ports (containers talk on the compose net).
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: devplatform
+      DB_SYNCHRONIZE: 'true'
+      DB_LOGGING: 'false'
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: dev-local-super-secret-key-change-in-prod
+      JWT_EXPIRES_IN: 1d
+      CORS_ORIGINS: '*'
+      AUTH_THROTTLE_TTL_MS: 60000
+      AUTH_THROTTLE_LIMIT: 15
+      BODY_LIMIT: 1mb
+      # Stripe — interpolated from backend/.env (kept out of git). Paste your
+      # test key there and `docker compose up -d backend` to enable real payments.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    ports:
+      - '3333:3333'
+
+  # ---- Monitoring (Step 15) ----
+  # Prometheus scrapes the backend's /metrics endpoint; Grafana graphs it.
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: devplatform-prometheus
+    restart: unless-stopped
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheusdata:/prometheus
+    # Maps host.docker.internal on Linux (no-op on Docker Desktop, which already
+    # provides it). Lets Prometheus reach the host-run backend on :3333.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: devplatform-grafana
+    restart: unless-stopped
+    ports:
+      - '3002:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      # Let you view dashboards without logging in (dev convenience).
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  redisdata:
+  prometheusdata:
+  grafanadata:

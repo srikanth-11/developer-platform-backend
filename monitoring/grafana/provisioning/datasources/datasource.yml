@@ -1,0 +1,12 @@
+# Auto-provision Prometheus as a Grafana data source on first boot, so you don't
+# have to add it through the UI. (Grafana reads this from
+# /etc/grafana/provisioning/datasources at startup.)
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # 'prometheus' is the service name on the compose network.
+    url: http://prometheus:9090
+    isDefault: true

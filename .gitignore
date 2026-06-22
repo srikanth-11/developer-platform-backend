@@ -1,0 +1,22 @@
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+
+# Environment — NEVER commit real secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.idea
+*.swp
+
+# Test coverage
+/coverage
