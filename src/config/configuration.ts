@@ -15,6 +15,9 @@ export default () => ({
     globalPrefix: process.env.GLOBAL_PREFIX ?? 'api',
   },
   database: {
+    // A full connection string (e.g. Neon) takes precedence over the discrete
+    // DB_* vars below when set.
+    url: process.env.DATABASE_URL || undefined,
     host: process.env.DB_HOST ?? 'localhost',
     port: parseInt(process.env.DB_PORT ?? '5432', 10),
     username: process.env.DB_USERNAME ?? 'postgres',
@@ -25,10 +28,23 @@ export default () => ({
     // and will switch to real migrations in a later step.
     synchronize: process.env.DB_SYNCHRONIZE === 'true',
     logging: process.env.DB_LOGGING === 'true',
+    // AWS RDS (and most managed Postgres) require TLS. DB_SSL=true turns it on.
+    // Provide the RDS CA so the server cert is actually VERIFIED — never disable
+    // verification in production. Either inline PEM (DB_SSL_CA) or a path to a
+    // PEM file baked into the image (DB_SSL_CA_FILE, used on ECS).
+    ssl: process.env.DB_SSL === 'true',
+    sslCa: process.env.DB_SSL_CA || undefined,
+    sslCaFile: process.env.DB_SSL_CA_FILE || undefined,
   },
   redis: {
+    // A full connection string (e.g. Render Key Value / Upstash) takes
+    // precedence over the discrete REDIS_* vars. Use rediss:// for TLS.
+    url: process.env.REDIS_URL || undefined,
     host: process.env.REDIS_HOST ?? 'localhost',
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    // ElastiCache with an AUTH token / in-transit encryption needs these.
+    password: process.env.REDIS_PASSWORD || undefined,
+    tls: process.env.REDIS_TLS === 'true',
   },
   jwt: {
     // Secret used to SIGN and VERIFY access tokens. Must be long & random in

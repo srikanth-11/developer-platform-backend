@@ -1,0 +1,69 @@
+# Render Blueprint — 100% free stack.
+#   - Backend: free Docker web service (this repo's Dockerfile)
+#   - Redis:   free Render Key Value (co-located, no daily command cap)
+#   - Postgres: Neon (external) — provided via DATABASE_URL (set in dashboard)
+#
+# Render auto-deploys on every push to the connected branch (no GitHub Actions).
+# NOTE: free web services sleep after ~15 min idle; first request then cold-starts.
+
+services:
+  - type: keyvalue
+    name: dp-redis
+    plan: free
+    region: oregon
+    maxmemoryPolicy: noeviction # don't evict BullMQ jobs
+    ipAllowList: [] # internal-only (reachable from the web service)
+
+  - type: web
+    name: developer-platform-backend
+    runtime: docker
+    plan: free
+    region: oregon # must match the Key Value region for internal networking
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3333"
+      - key: GLOBAL_PREFIX
+        value: api
+
+      # --- Postgres (Neon): paste the POOLED connection string in the dashboard.
+      #     Looks like: postgresql://user:pass@ep-xxx-pooler.REGION.aws.neon.tech/db
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSL
+        value: "true"
+      # "true" creates the schema on first boot; flip to "false" afterwards.
+      - key: DB_SYNCHRONIZE
+        value: "true"
+      - key: DB_LOGGING
+        value: "false"
+
+      # --- Redis (Render Key Value): auto-wired, no manual entry needed ---
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: dp-redis
+          property: connectionString
+
+      # --- Auth (Render generates a strong random value once) ---
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1d
+
+      # --- CORS / frontend (your Vercel URL, e.g. https://your-app.vercel.app) ---
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+      # --- Stripe (live billing) ---
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      # Set AFTER creating the webhook (it needs the live Render URL).
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false

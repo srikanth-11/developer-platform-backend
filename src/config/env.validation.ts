@@ -15,18 +15,47 @@ export const envValidationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   GLOBAL_PREFIX: Joi.string().default('api'),
 
-  // Database
-  DB_HOST: Joi.string().required(),
+  // Database. A full DATABASE_URL (Neon etc.) makes the discrete DB_* optional.
+  DATABASE_URL: Joi.string().uri().optional(),
+  DB_HOST: Joi.string().when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
   DB_PORT: Joi.number().default(5432),
-  DB_USERNAME: Joi.string().required(),
-  DB_PASSWORD: Joi.string().required(),
-  DB_NAME: Joi.string().required(),
+  DB_USERNAME: Joi.string().when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
+  DB_PASSWORD: Joi.string().when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
+  DB_NAME: Joi.string().when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
   DB_SYNCHRONIZE: Joi.boolean().default(false),
   DB_LOGGING: Joi.boolean().default(false),
+  // TLS for managed Postgres (AWS RDS). DB_SSL_CA holds the RDS CA bundle (PEM)
+  // so the certificate is verified, not blindly trusted.
+  DB_SSL: Joi.boolean().default(false),
+  DB_SSL_CA: Joi.string().allow('').optional(),
 
-  // Redis (used from Phase 3 onward; validated now so infra is ready)
-  REDIS_HOST: Joi.string().required(),
+  // Redis. A full REDIS_URL (Render Key Value / Upstash) makes REDIS_HOST optional.
+  REDIS_URL: Joi.string().uri({ scheme: ['redis', 'rediss'] }).optional(),
+  REDIS_HOST: Joi.string().when('REDIS_URL', {
+    is: Joi.exist(),
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
   REDIS_PORT: Joi.number().default(6379),
+  // ElastiCache AUTH token + in-transit encryption (optional).
+  REDIS_PASSWORD: Joi.string().allow('').optional(),
+  REDIS_TLS: Joi.boolean().default(false),
 
   // JWT
   JWT_SECRET: Joi.string().min(16).required(),

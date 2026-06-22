@@ -25,14 +25,22 @@ import { REDIS_CLIENT } from './redis.constants';
     {
       provide: REDIS_CLIENT,
       inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        new Redis({
-          host: config.get<string>('redis.host'),
-          port: config.get<number>('redis.port'),
-          // Required by BullMQ later; harmless now. Lets commands wait instead
-          // of erroring while reconnecting.
-          maxRetriesPerRequest: null,
-        }),
+      useFactory: (config: ConfigService) => {
+        const url = config.get<string>('redis.url');
+        // maxRetriesPerRequest:null is required by BullMQ and harmless here —
+        // it lets commands wait instead of erroring while reconnecting.
+        // A rediss:// URL enables TLS automatically (Upstash etc.).
+        return url
+          ? new Redis(url, { maxRetriesPerRequest: null })
+          : new Redis({
+              host: config.get<string>('redis.host'),
+              port: config.get<number>('redis.port'),
+              // Managed Redis AUTH token + in-transit encryption (when enabled).
+              password: config.get<string>('redis.password'),
+              tls: config.get<boolean>('redis.tls') ? {} : undefined,
+              maxRetriesPerRequest: null,
+            });
+      },
     },
   ],
   exports: [REDIS_CLIENT],
