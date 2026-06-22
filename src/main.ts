@@ -5,38 +5,12 @@ import './polyfills';
 import { ValidationPipe, VERSION_NEUTRAL, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import {
-  json,
-  NextFunction,
-  raw,
-  Request,
-  RequestHandler,
-  Response,
-  urlencoded,
-} from 'express';
+import { json, raw, RequestHandler, urlencoded } from 'express';
 import helmet from 'helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppModule } from './app.module';
 import { DeveloperPortalService } from './developer-portal/developer-portal.service';
-import { MonitoringService } from './monitoring/monitoring.service';
-
-/**
- * Collapse high-cardinality path segments (uuids, numeric ids) into placeholders
- * so the Prometheus `route` label stays bounded — `/api/organizations/:id/...`
- * instead of a unique label per org.
- */
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function normalizeRoute(path: string): string {
-  return (
-    path
-      .split('?')[0]
-      .split('/')
-      .map((seg) => (UUID_RE.test(seg) ? ':id' : /^\d+$/.test(seg) ? ':n' : seg))
-      .join('/') || '/'
-  );
-}
 
 async function bootstrap() {
   // Disable Nest's built-in body parser so we can install one with a SIZE LIMIT
@@ -67,29 +41,8 @@ async function bootstrap() {
   // Consistent error shape + no internal leakage on unexpected errors.
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Per-request Prometheus metrics. A plain Express middleware (installed via
-  // app.use) reliably sees EVERY request — including 404s and errors — and
-  // records on the response's `finish` event with the final status code.
-  const monitoring = app.get(MonitoringService);
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/metrics') return next(); // don't measure the scrape
-    const start = process.hrtime.bigint();
-    res.on('finish', () => {
-      const durationSec = Number(process.hrtime.bigint() - start) / 1e9;
-      monitoring.observe(
-        req.method,
-        normalizeRoute(req.originalUrl),
-        res.statusCode,
-        durationSec,
-      );
-    });
-    next();
-  });
-
-  // All routes are served under a common prefix, e.g. /api/health — EXCEPT
-  // /metrics, which Prometheus expects at the root. (globalPrefix is declared
-  // above, next to the body parsers, since the webhook raw-body path needs it.)
-  app.setGlobalPrefix(globalPrefix, { exclude: ['metrics'] });
+  // All routes are served under a common prefix, e.g. /api/health.
+  app.setGlobalPrefix(globalPrefix);
 
   // URI versioning: versioned controllers serve at /api/v1/…, /api/v2/….
   // defaultVersion VERSION_NEUTRAL means existing (unversioned) controllers keep

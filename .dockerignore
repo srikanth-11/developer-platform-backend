@@ -13,6 +13,3 @@ Dockerfile
 README.md
 NOTES.md
 test
-# Observability config — bind-mounted into the prometheus/grafana containers by
-# docker-compose, not needed inside the backend image.
-monitoring

@@ -26,7 +26,6 @@ import { ApiLogsModule } from './api-logs/api-logs.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { AuditModule } from './audit/audit.module';
 import { AnalyticsModule } from './analytics/analytics.module';
-import { MonitoringModule } from './monitoring/monitoring.module';
 import { NotificationsModule } from './notifications/notifications.module';
 
 import { AppController } from './app.controller';
@@ -59,7 +58,6 @@ import { AppService } from './app.service';
         ],
       }),
     }),
-    MonitoringModule,
     DatabaseModule,
     RedisModule,
     QueueModule,
